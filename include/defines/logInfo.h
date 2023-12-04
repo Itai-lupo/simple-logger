@@ -39,14 +39,13 @@ typedef struct
 #define setFileName(filePath)
 #endif
 
-#define CONSTRACT_LOG_INFO(logDataName, severitryLevel)                                                                 \
+#define CONSTRACT_LOG_INFO(logDataName, severitryLevel)                                                                \
 	logInfo logDataName = {                                                                                            \
 		.metadata =                                                                                                    \
 			{                                                                                                          \
 					   setFileName(__FILE__).fileId = FILE_ID,                                                                \
 					   .line = __LINE__,                                                                                      \
 					   .severity = severitryLevel,                                                                            \
-					   .logtime = {0, 0},                                                                                     \
 					   .tid = gettid(),                                                                                       \
 					   },                                                                                                         \
 		.msgSize = 0,                                                                                                  \

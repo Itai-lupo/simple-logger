@@ -3,6 +3,7 @@ a simple async cpp linux logger that works with c and cpp.
 
 ## usage
 you can add src to you SRCS and include to your include paths or use https://github.com/Itai-lupo/cpp-project-template
+you should also include git@github.com:Itai-lupo/simple-error-check.git in your project includes.
 
 this our the defines that can be used to change the behaver:
 

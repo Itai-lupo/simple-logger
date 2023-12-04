@@ -10,10 +10,10 @@
 
 typedef enum
 {
-	trace = LOG_TRACE_LEVEL,
-	debug = LOG_DEBUG_LEVEL,
-	info = LOG_INFO_LEVEL,
-	warn = LOG_WARN_LEVEL,
-	err = LOG_ERR_LEVEL,
-	critical = LOG_CRITICAL_LEVEL,
+	traceLevel = LOG_TRACE_LEVEL,
+	debugLevel = LOG_DEBUG_LEVEL,
+	infoLevel = LOG_INFO_LEVEL,
+	warnLevel = LOG_WARN_LEVEL,
+	errorLevel = LOG_ERR_LEVEL,
+	criticalLevel = LOG_CRITICAL_LEVEL,
 } logLevel;

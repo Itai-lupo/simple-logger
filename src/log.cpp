@@ -1,7 +1,7 @@
 
 #include "log.h"
 
-
+#include <err.h>
 #include <fmt/chrono.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -28,7 +28,7 @@ int efd = -1;
 
 constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
 
-static int getThreadId(const pid_t tid, char *buf, int bufSize)
+static err_t getThreadId(const pid_t tid, char *buf, int bufSize)
 {
 	std::string commPath = fmt::format("/proc/self/task/{}/comm", tid);
 
@@ -36,10 +36,10 @@ static int getThreadId(const pid_t tid, char *buf, int bufSize)
 	int threadNameSize = read(fd, buf, bufSize);
 	close(fd);
 	buf[threadNameSize - 1] = '\0';
-	return 0;
+	return NO_ERRORCODE;
 }
 
-static int createListenSocket()
+static err_t createListenSocket()
 {
 
 	struct sockaddr_un serverName;
@@ -56,20 +56,20 @@ static int createListenSocket()
 		exit(1);
 	}
 
-	return 0;
+	return NO_ERRORCODE;
 }
 
-static int createWriteLogSocket()
+static err_t createWriteLogSocket()
 {
 	logWriteSock = socket(AF_UNIX, SOCK_DGRAM, 0);
 
 	name.sun_family = AF_UNIX;
 	strcpy(name.sun_path, NAME);
 
-	return 0;
+	return NO_ERRORCODE;
 }
 
-static void printLog(const logInfo &logToPrint)
+static err_t printLog(const logInfo &logToPrint)
 {
 
 	char threadName[17] = {0};
@@ -87,6 +87,8 @@ static void printLog(const logInfo &logToPrint)
 						 logLevelShortMessage[logToPrint.metadata.severity], logToPrint.msg, CEND, fileName,
 						 logToPrint.metadata.line, threadName, logToPrint.metadata.tid, logToPrint.metadata.fileId);
 	write(STDERR_FILENO, logRes.data(), logRes.size());
+
+	return NO_ERRORCODE;
 }
 
 void *logServer(__attribute_maybe_unused__ void *args)
@@ -94,18 +96,11 @@ void *logServer(__attribute_maybe_unused__ void *args)
 	logInfo buf;
 	bool shouldRun = true;
 	int nfds = 2;
-	ssize_t bytesRead = 0;
 	int pollNum = 0;
-	struct pollfd fds[2] = {
-		{0, 0, 0},
-		   {0, 0, 0}
-	};
-
-	fds[0].fd = listenSock;
-	fds[0].events = POLLIN;
-
-	fds[1].fd = efd;
-	fds[1].events = POLLIN;
+	struct pollfd fds[2]{
+		[0] = {.fd = listenSock, .events = POLLIN},
+			[1] = {.fd = efd,		  .events = POLLIN}
+	   };
 
 	shouldRun = true;
 	while (shouldRun)
@@ -113,7 +108,7 @@ void *logServer(__attribute_maybe_unused__ void *args)
 		pollNum = poll(fds, nfds, -1);
 		if (pollNum > 0 && (fds[0].revents & POLLIN))
 		{
-			bytesRead = read(listenSock, &buf, sizeof(logInfo));
+			read(listenSock, &buf, sizeof(logInfo));
 			printLog(buf);
 		}
 		if (pollNum > 0 && (fds[1].revents & POLLIN))
@@ -123,18 +118,15 @@ void *logServer(__attribute_maybe_unused__ void *args)
 		}
 	}
 
-	do
+	while (read(listenSock, &buf, sizeof(logInfo)) > 0)
 	{
-		bytesRead = read(listenSock, &buf, sizeof(logInfo));
-		if (bytesRead > 0)
-		{
-			printLog(buf);
-		}
-	} while (bytesRead > 0);
+		printLog(buf);
+	}
+
 	return NULL;
 }
 
-int initLogger()
+err_t initLogger()
 {
 	efd = eventfd(0, 0);
 	if (efd == -1)
@@ -147,10 +139,10 @@ int initLogger()
 	pthread_create(&loggerThread, NULL, logServer, NULL);
 
 	createWriteLogSocket();
-	return 0;
+	return NO_ERRORCODE;
 }
 
-int closeLogger()
+THROWS err_t closeLogger()
 {
 	uint64_t u = 1;
 	write(efd, &u, sizeof(uint64_t));
@@ -159,10 +151,11 @@ int closeLogger()
 	close(listenSock);
 	unlink(NAME);
 
-	return 0;
+	return NO_ERRORCODE;
 }
 
-void writeLog(logInfo lineData)
+err_t writeLog(logInfo lineData)
 {
 	sendto(logWriteSock, &lineData, sizeof(logInfo), 0, (const struct sockaddr *)&name, sizeof(struct sockaddr_un));
+    return NO_ERRORCODE;
 }

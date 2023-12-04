@@ -22,29 +22,35 @@
 
 #ifdef USE_C_LOG
 #include "formatters/cFormatter.h"
+#define ERROR_FMT "error from (%d:%d) with code %d"
 #endif
 
 #ifdef USE_FMT_LOG
 #include "formatters/fmtFormatter.h"
+#define ERROR_FMT "error from ({}:{}) with code {}"
 #endif
 
 #ifndef ACTIVE_LOG_LEVEL
 #define ACTIVE_LOG_LEVEL LOG_TRACE_LEVEL
 #endif // !ACTIVE_LOG_LEVEL
 
-// #undef USE_FILENAME
+#include "defines/logMacros.h"
+
+#ifndef TRACE_MACRO
+#define TRACE_MACRO(err) LOG_ERR(ERROR_FMT, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode)
+#endif // !TRACE_MACRO
+
+#include "err.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-	void writeLog(logInfo logData);
+	err_t writeLog(logInfo logData);
 
-	int initLogger();
-	int closeLogger();
+	THROWS err_t initLogger();
+	THROWS err_t closeLogger();
 #ifdef __cplusplus
 }
 #endif
-
-#include "defines/logMacros.h"

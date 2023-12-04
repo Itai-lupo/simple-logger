@@ -7,7 +7,7 @@
 #define LOG_MACRO(severity, msg, ...)                                                                                  \
 	do                                                                                                                 \
 	{                                                                                                                  \
-		CONTRACT_LOG_INFO(logData, severity);                                                                          \
+		CONSTRACT_LOG_INFO(logData, severity);                                                                          \
 		FORMAT_FUNC(logData, msg __VA_OPT__(, ) __VA_ARGS__);                                                          \
 		PRINT_FUNCTION(logData);                                                                                       \
 	} while (0)

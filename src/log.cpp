@@ -1,17 +1,15 @@
 
 #include "log.h"
 
-#include <cstdio>
-#include <cwchar>
+
 #include <fmt/chrono.h>
-#include <fmt/color.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 
 #include <fcntl.h>
 #include <pthread.h>
 #include <string>
-#include <string_view>
+#include <sys/eventfd.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -22,11 +20,11 @@
 
 #define SECS_IN_DAY (24 * 60 * 60)
 
-int logWriteSock = 0;
-bool shouldRun = true;
-pthread_t loggerThread = 0;
-int listenSock = 0;
+int logWriteSock = -1;
+pthread_t loggerThread = -1;
+int listenSock = -1;
 struct sockaddr_un name;
+int efd = -1;
 
 constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
 
@@ -94,15 +92,20 @@ static void printLog(const logInfo &logToPrint)
 void *logServer(__attribute_maybe_unused__ void *args)
 {
 	logInfo buf;
-	int nfds = 1;
+	bool shouldRun = true;
+	int nfds = 2;
 	ssize_t bytesRead = 0;
 	int pollNum = 0;
-	struct pollfd fds[1] = {
-		{0, 0, 0}
-	 };
+	struct pollfd fds[2] = {
+		{0, 0, 0},
+		   {0, 0, 0}
+	};
 
 	fds[0].fd = listenSock;
 	fds[0].events = POLLIN;
+
+	fds[1].fd = efd;
+	fds[1].events = POLLIN;
 
 	shouldRun = true;
 	while (shouldRun)
@@ -112,6 +115,11 @@ void *logServer(__attribute_maybe_unused__ void *args)
 		{
 			bytesRead = read(listenSock, &buf, sizeof(logInfo));
 			printLog(buf);
+		}
+		if (pollNum > 0 && (fds[1].revents & POLLIN))
+		{
+			shouldRun = false;
+			printf("a %d\n", shouldRun);
 		}
 	}
 
@@ -128,6 +136,12 @@ void *logServer(__attribute_maybe_unused__ void *args)
 
 int initLogger()
 {
+	efd = eventfd(0, 0);
+	if (efd == -1)
+	{
+		exit(EXIT_FAILURE);
+	}
+
 	createListenSocket();
 
 	pthread_create(&loggerThread, NULL, logServer, NULL);
@@ -138,8 +152,8 @@ int initLogger()
 
 int closeLogger()
 {
-	shouldRun = false;
-	LOG_CRITICAL("close logger");
+	uint64_t u = 1;
+	write(efd, &u, sizeof(uint64_t));
 	pthread_join(loggerThread, NULL);
 
 	close(listenSock);

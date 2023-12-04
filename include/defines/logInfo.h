@@ -39,7 +39,7 @@ typedef struct
 #define setFileName(filePath)
 #endif
 
-#define CONTRACT_LOG_INFO(logDataName, severitryLevel)                                                                 \
+#define CONSTRACT_LOG_INFO(logDataName, severitryLevel)                                                                 \
 	logInfo logDataName = {                                                                                            \
 		.metadata =                                                                                                    \
 			{                                                                                                          \

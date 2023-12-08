@@ -37,7 +37,7 @@
 #include "defines/logMacros.h"
 
 #ifndef TRACE_MACRO
-#define TRACE_MACRO(err) LOG_ERR(ERROR_FMT, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode)
+#define TRACE_MACRO(msg, ...) LOG_ERR(ERROR_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode __VA_OPT__(,) __VA_ARGS__)
 #endif // !TRACE_MACRO
 
 #include "err.h"

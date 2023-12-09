@@ -1,7 +1,10 @@
 #include <cstdint>
+#include <sys/types.h>
 #define PRINT_FUNCTION(logData) printLog(logData);
 
+#include "files.h"
 #include "log.h"
+#include "sockets.h"
 
 #include <err.h>
 #include <fmt/chrono.h>
@@ -24,144 +27,20 @@ static err_t printLog(const logInfo &logToPrint);
 
 #define SECS_IN_DAY (24 * 60 * 60)
 
-using fd_t = int;
-
-fd_t logWriteSock = -1;
+fd_t logWriteSock = INVALID_FD;
 pthread_t loggerThread = -1;
-fd_t listenSock = -1;
+fd_t listenSock = INVALID_FD;
 struct sockaddr_un name;
-fd_t efd = -1;
+fd_t efd = INVALID_FD;
 
 constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
-
-THROWS static err_t safe_open(const char *const path, int flags, mode_t mode, fd_t *fd)
-{
-	err_t err = NO_ERRORCODE;
-
-	QUITE_CHECK(path != NULL);
-	QUITE_CHECK(fd != NULL);
-	QUITE_CHECK(*fd == -1);
-
-	*fd = open(path, flags, mode);
-	QUITE_CHECK(*fd != -1);
-cleanup:
-	return err;
-}
-
-THROWS static err_t safe_read(fd_t fd, void *buf, size_t size, ssize_t *outSize)
-{
-	err_t err = NO_ERRORCODE;
-	ssize_t tempOutSize = 0;
-
-	QUITE_CHECK(outSize != NULL);
-	QUITE_CHECK(buf != NULL);
-
-	tempOutSize = read(fd, buf, size);
-	QUITE_CHECK(tempOutSize != -1);
-
-cleanup:
-	*outSize = tempOutSize;
-	return err;
-}
-
-THROWS static err_t safe_write(fd_t fd, void *buf, size_t size, ssize_t *bytesWritten)
-{
-	err_t err = NO_ERRORCODE;
-	ssize_t tempBytesWritten = 0;
-
-	QUITE_CHECK(bytesWritten != NULL);
-	QUITE_CHECK(buf != NULL);
-
-	tempBytesWritten = write(fd, buf, size);
-	QUITE_CHECK(tempBytesWritten != -1);
-
-cleanup:
-	*bytesWritten = tempBytesWritten;
-	return err;
-}
-
-static err_t safe_close(fd_t *fd)
-{
-	err_t err = NO_ERRORCODE;
-	QUITE_CHECK(close(*fd));
-
-cleanup:
-	*fd = -1;
-	return err;
-}
-THROWS static err_t safe_poll(struct pollfd *fds, int ntfds, int timeout,
-							  err_t callback(pollfd *events, bool *shouldCountinue, void *ptr), void *ptr)
-{
-	err_t err = NO_ERRORCODE;
-	bool shouldCountinue = true;
-	int pollNum = 0;
-
-	CHECK(callback != NULL);
-	CHECK(fds != NULL);
-	CHECK(ntfds != 0);
-	while (shouldCountinue)
-	{
-		pollNum = poll(fds, ntfds, timeout);
-		if (pollNum > 0)
-		{
-			callback(fds, &shouldCountinue, ptr);
-		}
-	}
-
-cleanup:
-	return err;
-}
-
-THROWS static err_t safe_sendto(fd_t sd, const void *const buf, size_t size, int flags, const struct sockaddr *destAddr,
-								socklen_t addrlen, ssize_t *bytesWritten)
-{
-	err_t err = NO_ERRORCODE;
-	ssize_t tempBytesWritten = 0;
-
-	QUITE_CHECK(sd != -1);
-	QUITE_CHECK(destAddr != NULL);
-	QUITE_CHECK(bytesWritten != NULL);
-	QUITE_CHECK(buf != NULL);
-
-	tempBytesWritten = sendto(sd, buf, size, flags, destAddr, addrlen);
-	QUITE_CHECK(tempBytesWritten != -1);
-
-cleanup:
-	*bytesWritten = tempBytesWritten;
-	return err;
-}
-
-THROWS static err_t create_socket(int domain, int type, int protocal, fd_t *sd)
-{
-	err_t err = NO_ERRORCODE;
-	QUITE_CHECK(sd != NULL);
-	QUITE_CHECK(*sd == -1);
-
-	*sd = socket(domain, type, protocal);
-	QUITE_CHECK(*sd != -1);
-
-cleanup:
-	return err;
-}
-
-THROWS static err_t safe_bind(fd_t sd, const struct sockaddr *const addr, socklen_t addrlen)
-{
-	err_t err = NO_ERRORCODE;
-	QUITE_CHECK(sd != -1);
-	QUITE_CHECK(addr != NULL);
-
-	CHECK(bind(sd, addr, addrlen) == 0);
-cleanup:
-	return err;
-}
-
-THROWS static err_t getThreadId(const pid_t tid, char *buf, int bufSize)
+THROWS static err_t getThreadName(const pid_t tid, char *buf, int bufSize)
 {
 	err_t err = NO_ERRORCODE;
 	std::string commPath = fmt::format("/proc/self/task/{}/comm", tid);
 	ssize_t threadNameSize = -1;
 
-	fd_t fd = -1;
+	fd_t fd = INVALID_FD;
 
 	QUITE_RETHROW(safe_open(commPath.data(), 0, O_RDONLY, &fd));
 
@@ -170,7 +49,7 @@ THROWS static err_t getThreadId(const pid_t tid, char *buf, int bufSize)
 	buf[threadNameSize - 1] = '\0';
 
 cleanup:
-	if (fd != -1)
+	if (IS_VALID_FD(fd))
 	{
 		safe_close(&fd);
 	}
@@ -184,8 +63,9 @@ THROWS static err_t createListenSocket()
 
 	RETHROW(create_socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK, 0, &listenSock));
 	RETHROW(safe_bind(listenSock, (const struct sockaddr *)&serverName, sizeof(struct sockaddr_un)));
+
 cleanup:
-	if (IS_ERROR(err) && listenSock != -1)
+	if (IS_ERROR(err) && IS_VALID_FD(listenSock))
 	{
 		REWARN(safe_close(&listenSock));
 	}
@@ -215,13 +95,13 @@ static err_t printLog(const logInfo &logToPrint)
 	fileName = logToPrint.metadata.fileName;
 #endif
 
-	REWARN(getThreadId(logToPrint.metadata.tid, threadName, sizeof(threadName)));
+	REWARN(getThreadName(logToPrint.metadata.tid, threadName, sizeof(threadName)));
 	logRes = fmt::format("[{:%Y/%m/%d %T}.{:d}] {} ({}) {:<128s} {} from {}:{}({}:{}) id {}\n",
 						 fmt::localtime(logToPrint.metadata.logtime.tv_sec), logToPrint.metadata.logtime.tv_nsec,
 						 logLevelColors[logToPrint.metadata.severity],
 						 logLevelShortMessage[logToPrint.metadata.severity], logToPrint.msg, CEND, fileName,
 						 logToPrint.metadata.line, threadName, logToPrint.metadata.tid, logToPrint.metadata.fileId);
-	RETHROW(safe_write(STDERR_FILENO, logRes.data(), logRes.size(), &bytesWritten));
+	RETHROW(safe_write({STDERR_FILENO}, logRes.data(), logRes.size(), &bytesWritten));
 cleanup:
 	return err;
 }
@@ -252,17 +132,20 @@ void *logServer(__attribute_maybe_unused__ void *args)
 	err_t err = NO_ERRORCODE;
 	logInfo buf;
 	int nfds = 2;
+	ssize_t bytesRead = 0;
 	struct pollfd fds[2]{
-		[0] = {.fd = listenSock, .events = POLLIN},
-		[1] = {.fd = efd,		  .events = POLLIN},
+		[0] = {.fd = listenSock.fd, .events = POLLIN},
+		[1] = {.fd = efd.fd,		 .events = POLLIN},
 	};
 
 	RETHROW(safe_poll(fds, nfds, -1, pollCalback, &buf));
 
 cleanup:
-	while (read(listenSock, &buf, sizeof(logInfo)) > 0)
+	REWARN(safe_read(listenSock, &buf, sizeof(logInfo), &bytesRead));
+	while (bytesRead > 0)
 	{
 		printLog(buf);
+		REWARN(safe_read(listenSock, &buf, sizeof(logInfo), &bytesRead));
 	}
 
 	return NULL;
@@ -271,8 +154,8 @@ cleanup:
 THROWS err_t initLogger()
 {
 	err_t err = NO_ERRORCODE;
-	efd = eventfd(0, 0);
-	CHECK(efd != -1);
+	efd.fd = eventfd(0, 0);
+	CHECK(IS_VALID_FD(efd));
 	RETHROW(createListenSocket());
 
 	CHECK(pthread_create(&loggerThread, NULL, logServer, NULL) == 0);
@@ -285,7 +168,7 @@ cleanup:
 THROWS err_t closeLogger()
 {
 	uint64_t u = 1;
-    err_t err = NO_ERRORCODE;
+	err_t err = NO_ERRORCODE;
 	ssize_t bytesWritten = 0;
 	RETHROW(safe_write(efd, &u, sizeof(uint64_t), &bytesWritten));
 

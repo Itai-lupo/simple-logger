@@ -22,12 +22,14 @@
 
 #ifdef USE_C_LOG
 #include "formatters/cFormatter.h"
-#define ERROR_FMT "error from (%d:%d) with code %d"
+#define ERROR_FMT "error from (%lu:%lu) with code %lu"
+#define RETHROW_FMT "rethrow error from (%lu:%lu) with code %lu at %d:%d"
 #endif
 
 #ifdef USE_FMT_LOG
 #include "formatters/fmtFormatter.h"
 #define ERROR_FMT "error from ({}:{}) with code {}"
+#define RETHROW_FMT "rethrow error from ({}:{}) with code {} at {}:{}"
 #endif
 
 #ifndef ACTIVE_LOG_LEVEL
@@ -39,6 +41,10 @@
 #ifndef TRACE_MACRO
 #define TRACE_MACRO(msg, ...) LOG_ERR(ERROR_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode __VA_OPT__(,) __VA_ARGS__)
 #endif // !TRACE_MACRO
+
+#ifndef RETRACE_MACRO
+#define RETRACE_MACRO(msg, ...) LOG_ERR(RETHROW_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode, FILE_ID, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#endif // !RETRACE_MACRO
 
 #include "err.h"
 

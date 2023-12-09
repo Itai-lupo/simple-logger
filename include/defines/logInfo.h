@@ -2,8 +2,10 @@
 
 #include "defines/logLevels.h"
 
+#include <linux/limits.h>
+#include <sched.h>
 #include <time.h>
-
+#include <unistd.h>
 #define MAX_LOG_LEN 128
 
 #ifndef CLOCK_TO_USE

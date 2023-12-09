@@ -145,7 +145,7 @@ cleanup:
 	while (bytesRead > 0)
 	{
 		printLog(buf);
-		REWARN(safe_read(listenSock, &buf, sizeof(logInfo), &bytesRead));
+		err = safe_read(listenSock, &buf, sizeof(logInfo), &bytesRead);
 	}
 
 	return NULL;

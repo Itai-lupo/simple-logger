@@ -138,7 +138,7 @@ void *logServer(__attribute_maybe_unused__ void *args)
 		[1] = {.fd = efd.fd,		 .events = POLLIN},
 	};
 
-	RETHROW(safe_poll(fds, nfds, -1, pollCalback, &buf));
+	RETHROW(safe_ppoll(fds, nfds, NULL, NULL, pollCalback, &buf));
 
 cleanup:
 	REWARN(safe_read(listenSock, &buf, sizeof(logInfo), &bytesRead));

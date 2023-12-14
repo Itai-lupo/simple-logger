@@ -26,6 +26,7 @@ typedef struct
 	logLevel severity;
 	struct timespec logtime;
 	pid_t tid;
+	pid_t pid;
 } lineInfo;
 
 typedef struct
@@ -49,6 +50,7 @@ typedef struct
 					   .line = __LINE__,                                                                                      \
 					   .severity = severitryLevel,                                                                            \
 					   .tid = gettid(),                                                                                       \
+					   .pid = getpid(),                                                                                       \
 					   },                                                                                                         \
 		.msgSize = 0,                                                                                                  \
 	};                                                                                                                 \

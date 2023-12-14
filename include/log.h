@@ -17,8 +17,8 @@
 #include <unistd.h>
 
 #include "defines/colors.h"
-#include "defines/logInfo.h"
 #include "defines/logLevels.h"
+#include "types/logInfo.h"
 
 #ifdef USE_C_LOG
 #include "formatters/cFormatter.h"
@@ -39,11 +39,14 @@
 #include "defines/logMacros.h"
 
 #ifndef TRACE_MACRO
-#define TRACE_MACRO(msg, ...) LOG_ERR(ERROR_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode __VA_OPT__(,) __VA_ARGS__)
+#define TRACE_MACRO(msg, ...)                                                                                          \
+	LOG_ERR(ERROR_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode __VA_OPT__(, ) __VA_ARGS__)
 #endif // !TRACE_MACRO
 
 #ifndef RETRACE_MACRO
-#define RETRACE_MACRO(msg, ...) LOG_ERR(RETHROW_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode, FILE_ID, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define RETRACE_MACRO(msg, ...)                                                                                        \
+	LOG_ERR(RETHROW_FMT msg, (uint64_t)err.fileId, (uint64_t)err.line, (uint64_t)err.errorCode, FILE_ID,               \
+			__LINE__ __VA_OPT__(, ) __VA_ARGS__)
 #endif // !RETRACE_MACRO
 
 #include "err.h"
@@ -55,8 +58,8 @@ extern "C"
 
 	err_t writeLog(logInfo logData);
 
-	THROWS err_t initLogger();
-	THROWS err_t closeLogger();
+	__attribute__((constructor(1))) err_t initLogger();
+	__attribute__((destructor(100))) err_t closeLogger();
 #ifdef __cplusplus
 }
 #endif

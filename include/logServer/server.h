@@ -1,3 +1,13 @@
+/**
+ * @file server.h
+ * @author itai lupo
+ * @brief the api of the log server
+ * @version 0.1
+ * @date 2023-12-14
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
 #pragma once
 #include "err.h"
 #include "files.h"
@@ -7,7 +17,15 @@ extern "C"
 {
 #endif
 
-	__attribute__((__noreturn__)) void initLogServer(const char *const _listenSockName, fd_t _efd[2]);
+	/**
+	 * @brief start the log server
+	 * @param listenSockName the name to open the unix domain socket on
+	 * @param killLogServerEfd a event fd that the logger will clean stop on it
+	 * @param waitForLoggerEfd the logger will write to it when it is read to receive logs
+	 */
+	void initLogServer(const char *const listenSockName, fd_t killLogServerEfd, fd_t waitForLoggerEfd)
+		__attribute__((__noreturn__));
+
 	THROWS err_t closeLogServer();
 
 #ifdef __cplusplus

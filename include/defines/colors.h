@@ -1,3 +1,13 @@
+/**
+ * @file colors.h
+ * @author itai lupo
+ * @brief you can use this to add colors to your logs
+ * @version 0.1
+ * @date 2023-12-14
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
 #pragma once
 
 #define CEND "\33[0m"
@@ -40,6 +50,9 @@
 #define CBEIGEBG2 "\33[106m"
 #define CWHITEBG2 "\33[107m"
 
+/**
+ * @brief this is the color scheme that will be used for the different log levels.
+ */
 static char logLevelColors[6][18] = {
 	CGREY, CBLUE, CGREEN CBOLD, CYELLOW CBOLD, CRED CBOLD, CWHITE2 CBOLD CREDBG,
 };

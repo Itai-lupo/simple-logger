@@ -15,7 +15,7 @@ this our the defines that can be used to change the behaver:
     this should be a uniq int for each of you files default to -1
 
 - PRINT_FUNCTION(logData) 
-    this is the function that is used to print the logInfo struct default to writeLog(logData)
+    this is the function that is used to print the logInfo_t struct default to writeLog(logData)
 
 
 - LOG_MACRO(severity, msg, ...) 

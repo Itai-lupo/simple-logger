@@ -1,3 +1,13 @@
+/**
+ * @file logLevels.h
+ * @author itai lupo
+ * @brief this is the all levels you can print you logs
+ * @version 0.1
+ * @date 2023-12-14
+ *
+ * @copyright Copyright (c) 2023
+ *
+ */
 #pragma once
 
 #define LOG_TRACE_LEVEL 0
@@ -8,6 +18,9 @@
 #define LOG_CRITICAL_LEVEL 5
 #define NO_LOG 6
 
+/**
+ * @brief this is a enum for all the log level, unless it is for precompile, stuff, use this
+ */
 typedef enum
 {
 	traceLevel = LOG_TRACE_LEVEL,

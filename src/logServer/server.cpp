@@ -30,7 +30,7 @@
 #define LOG_FMT "[{:^16s}:{:d} {:%Y/%m/%d %T}.{:d}] {} ({}) {:<128s}{} from {:s}:{}:{}\t({:^16s}:{}) \n"
 
 static fd_t listenSock = INVALID_FD;
-static fd_t efd = INVALID_FD;
+static fd_t dieOnEventfd = INVALID_FD;
 static const char *listenSockName = NULL;
 
 constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
@@ -77,7 +77,7 @@ cleanup:
 	return err;
 }
 
-static err_t printLog(const logInfo &logToPrint)
+static err_t printLog(const logInfo_t &logToPrint)
 {
 	err_t err = NO_ERRORCODE;
 	char threadName[17] = {0};
@@ -122,12 +122,12 @@ err_t pollCalback(struct pollfd *fds, bool *shouldCountinue, void *ptr)
 {
 	err_t err = NO_ERRORCODE;
 	ssize_t bytesRead = 0;
-	logInfo *buf = (logInfo *)ptr;
+	logInfo_t *buf = (logInfo_t *)ptr;
 	CHECK(buf != NULL);
 	if (fds[0].revents & POLLIN)
 	{
-		RETHROW(safeRead(listenSock, buf, sizeof(logInfo), &bytesRead));
-		CHECK(bytesRead == sizeof(logInfo));
+		RETHROW(safeRead(listenSock, buf, sizeof(logInfo_t), &bytesRead));
+		CHECK(bytesRead == sizeof(logInfo_t));
 
 		RETHROW(printLog(*buf));
 	}
@@ -144,11 +144,11 @@ cleanup:
 err_t logServer()
 {
 	err_t err = NO_ERRORCODE;
-	logInfo buf;
+	logInfo_t buf;
 	int nfds = 2;
 	struct pollfd fds[2]{
-		[0] = {.fd = listenSock.fd, .events = POLLIN},
-		[1] = {.fd = efd.fd,		 .events = POLLIN},
+		[0] = {.fd = listenSock.fd,	.events = POLLIN},
+		[1] = {.fd = dieOnEventfd.fd, .events = POLLIN},
 	};
 
 	RETHROW(safePpoll(fds, nfds, NULL, NULL, pollCalback, &buf));
@@ -158,7 +158,8 @@ cleanup:
 	return err;
 }
 
-__attribute__((__noreturn__)) void initLogServer(const char *const _listenSockName, fd_t _efd[2])
+__attribute__((__noreturn__)) void initLogServer(const char *const _listenSockName, fd_t killLogServerEfd,
+												 fd_t waitForLoggerEfd)
 {
 	err_t err = NO_ERRORCODE;
 	ssize_t bytesWritten = 0;
@@ -166,10 +167,13 @@ __attribute__((__noreturn__)) void initLogServer(const char *const _listenSockNa
 
 	prctl(PR_SET_NAME, (unsigned long)"logger", 0, 0, 0);
 
-	efd = _efd[0];
+	dieOnEventfd = killLogServerEfd;
 	listenSockName = _listenSockName;
+
 	RETHROW(createListenSocket(listenSockName));
-	RETHROW(safeWrite(_efd[1], &u, sizeof(uint64_t), &bytesWritten));
+
+	RETHROW(safeWrite(waitForLoggerEfd, &u, sizeof(uint64_t), &bytesWritten));
+	REWARN(safeClose(&waitForLoggerEfd));
 
 	RETHROW(logServer());
 cleanup:
@@ -179,7 +183,10 @@ cleanup:
 err_t closeLogServer()
 {
 	err_t err = NO_ERRORCODE;
+
 	REWARN(safeClose(&listenSock));
+	REWARN(safeClose(&dieOnEventfd));
+
 	WARN(unlink(listenSockName) == 0);
 
 	return err;

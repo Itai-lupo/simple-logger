@@ -26,8 +26,6 @@ extern "C"
 	void initLogServer(const char *const listenSockName, fd_t killLogServerEfd, fd_t waitForLoggerEfd)
 		__attribute__((__noreturn__));
 
-	THROWS err_t closeLogServer();
-
 #ifdef __cplusplus
 }
 #endif

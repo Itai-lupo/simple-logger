@@ -5,6 +5,7 @@
 #include "logServer/server.h"
 
 #include "defines/colors.h"
+#include "processes.h"
 #include "types/err_t.h"
 
 #include "files.h"
@@ -16,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <fcntl.h>
+#include <mqueue.h>
 #include <string>
 #include <sys/poll.h>
 #include <sys/prctl.h>
@@ -23,59 +25,26 @@
 #include <time.h>
 #include <unistd.h>
 
+#define QUEUE_MAXMSG 10					/* Maximum number of messages. */
+#define QUEUE_MSGSIZE sizeof(logInfo_t) /* Length of message. */
+#define QUEUE_ATTR_INITIALIZER                                                                                         \
+	((struct mq_attr){                                                                                                 \
+		.mq_flags = 0,                                                                                                 \
+		.mq_maxmsg = QUEUE_MAXMSG,                                                                                     \
+		.mq_msgsize = QUEUE_MSGSIZE,                                                                                   \
+		.mq_curmsgs = 0,                                                                                               \
+		{0},                                                                                                           \
+	})
+
 #define SECS_IN_DAY (24 * 60 * 60)
 
-#define THREAD_NAME_PATH_FMT "/proc/{}/task/{}/comm"
-#define PROCESS_NAME_PATH_FMT "/proc/{}/comm"
 #define LOG_FMT "[{:^16s}:{:d} {:%Y/%m/%d %T}.{:d}] {} ({}) {:<128s}{} from {:s}:{}:{}\t({:^16s}:{}) \n"
 
-static fd_t listenSock = INVALID_FD;
 static fd_t dieOnEventfd = INVALID_FD;
-static const char *listenSockName = NULL;
+
+static mqd_t logsQueue = -1;
 
 constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
-
-THROWS static err_t getThreadName(const pid_t pid, const pid_t tid, char *buf, int bufSize)
-{
-	err_t err = NO_ERRORCODE;
-	std::string commPath = fmt::format(THREAD_NAME_PATH_FMT, pid, tid);
-	ssize_t threadNameSize = -1;
-
-	fd_t fd = INVALID_FD;
-
-	QUITE_RETHROW(safeOpen(commPath.data(), 0, O_RDONLY, &fd));
-	QUITE_RETHROW(safeRead(fd, buf, bufSize, &threadNameSize));
-	buf[threadNameSize - 1] = '\0';
-
-cleanup:
-	if (IS_VALID_FD(fd))
-	{
-		safeClose(&fd);
-	}
-
-	return err;
-}
-
-THROWS static err_t getProcessName(const pid_t pid, char *buf, int bufSize)
-{
-	err_t err = NO_ERRORCODE;
-	std::string commPath = fmt::format(PROCESS_NAME_PATH_FMT, pid);
-	ssize_t processNameSize = -1;
-
-	fd_t fd = INVALID_FD;
-
-	QUITE_RETHROW(safeOpen(commPath.data(), 0, O_RDONLY, &fd));
-	QUITE_RETHROW(safeRead(fd, buf, bufSize, &processNameSize));
-	buf[processNameSize - 1] = '\0';
-
-cleanup:
-	if (IS_VALID_FD(fd))
-	{
-		safeClose(&fd);
-	}
-
-	return err;
-}
 
 static err_t printLog(const logInfo_t &logToPrint)
 {
@@ -89,9 +58,12 @@ static err_t printLog(const logInfo_t &logToPrint)
 #ifdef USE_FILENAME
 	fileName = logToPrint.metadata.fileName;
 #endif
+	RETHROW_NOHANDLE_TRACE(
+		getThreadName(logToPrint.metadata.pid, logToPrint.metadata.tid, threadName, sizeof(threadName)),
+		"failed to get name of thread with tid {} ", logToPrint.metadata.tid);
 
-	REWARN(getThreadName(logToPrint.metadata.pid, logToPrint.metadata.tid, threadName, sizeof(threadName)));
-	REWARN(getProcessName(logToPrint.metadata.pid, processName, sizeof(processName)));
+	RETHROW_NOHANDLE_TRACE(getProcessName(logToPrint.metadata.pid, processName, sizeof(processName)),
+						   "failed to get name of process with pid {} ", logToPrint.metadata.pid);
 
 	logRes =
 		fmt::format(LOG_FMT, processName, logToPrint.metadata.pid, fmt::localtime(logToPrint.metadata.logtime.tv_sec),
@@ -99,7 +71,9 @@ static err_t printLog(const logInfo_t &logToPrint)
 					logLevelShortMessage[logToPrint.metadata.severity], logToPrint.msg, CEND, fileName,
 					logToPrint.metadata.line, logToPrint.metadata.fileId, threadName, logToPrint.metadata.tid);
 
-	RETHROW(safeWrite({STDERR_FILENO}, logRes.data(), logRes.size(), &bytesWritten));
+	RETHROW(safeWrite({(logToPrint.metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
+					  logRes.data(), logRes.size(), &bytesWritten));
+
 cleanup:
 	return err;
 }
@@ -107,29 +81,27 @@ cleanup:
 THROWS static err_t createListenSocket(const char *const listenSockName)
 {
 	err_t err = NO_ERRORCODE;
-	struct sockaddr_un serverName = {0, {0}};
-	serverName.sun_family = AF_UNIX;
-	strncpy(serverName.sun_path, listenSockName, 108);
 
-	RETHROW(createSocket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK, 0, &listenSock));
-	RETHROW(safeBind(listenSock, (const struct sockaddr *)&serverName, sizeof(struct sockaddr_un)));
+	struct mq_attr attr = QUEUE_ATTR_INITIALIZER;
+
+	logsQueue = mq_open(listenSockName, O_RDONLY | O_CREAT | O_NONBLOCK, 0600, &attr);
+	CHECK(logsQueue > 0);
 
 cleanup:
 	return err;
 }
 
-err_t pollCalback(struct pollfd *fds, bool *shouldCountinue, void *ptr)
+err_t static pollCalback(struct pollfd *fds, bool *shouldCountinue, [[maybe_unused]] void *ptr)
 {
 	err_t err = NO_ERRORCODE;
-	ssize_t bytesRead = 0;
-	logInfo_t *buf = (logInfo_t *)ptr;
-	CHECK(buf != NULL);
+	uint32_t prio = 0;
+
+	logInfo_t buf;
+
 	if (fds[0].revents & POLLIN)
 	{
-		RETHROW(safeRead(listenSock, buf, sizeof(logInfo_t), &bytesRead));
-		CHECK(bytesRead == sizeof(logInfo_t));
-
-		RETHROW(printLog(*buf));
+		CHECK(mq_receive(logsQueue, (char *)&buf, sizeof(logInfo_t), &prio) >= 0);
+		RETHROW(printLog(buf));
 	}
 	else if (fds[1].revents & POLLIN)
 	{
@@ -141,24 +113,33 @@ cleanup:
 	return err;
 }
 
-err_t logServer()
+err_t static logServer()
 {
 	err_t err = NO_ERRORCODE;
-	logInfo_t buf;
 	int nfds = 2;
 	struct pollfd fds[2]{
-		[0] = {.fd = listenSock.fd,	.events = POLLIN},
+		[0] = {.fd = logsQueue,		.events = POLLIN},
 		[1] = {.fd = dieOnEventfd.fd, .events = POLLIN},
 	};
 
-	RETHROW(safePpoll(fds, nfds, NULL, NULL, pollCalback, &buf));
+	RETHROW(safePpoll(fds, nfds, NULL, NULL, pollCalback, NULL));
 
 cleanup:
+	return err;
+}
+
+err_t static closeLogServer()
+{
+	err_t err = NO_ERRORCODE;
+
+	WARN(mq_close(logsQueue) == 0);
+	logsQueue = -1;
+	REWARN(safeClose(&dieOnEventfd));
 
 	return err;
 }
 
-__attribute__((__noreturn__)) void initLogServer(const char *const _listenSockName, fd_t killLogServerEfd,
+__attribute__((__noreturn__)) void initLogServer(const char *const listenSockName, fd_t killLogServerEfd,
 												 fd_t waitForLoggerEfd)
 {
 	err_t err = NO_ERRORCODE;
@@ -168,7 +149,6 @@ __attribute__((__noreturn__)) void initLogServer(const char *const _listenSockNa
 	prctl(PR_SET_NAME, (unsigned long)"logger", 0, 0, 0);
 
 	dieOnEventfd = killLogServerEfd;
-	listenSockName = _listenSockName;
 
 	RETHROW(createListenSocket(listenSockName));
 
@@ -176,18 +156,9 @@ __attribute__((__noreturn__)) void initLogServer(const char *const _listenSockNa
 	REWARN(safeClose(&waitForLoggerEfd));
 
 	RETHROW(logServer());
+
 cleanup:
+	REWARN(closeLogServer());
+
 	exit((int)err.errorCode);
-}
-
-err_t closeLogServer()
-{
-	err_t err = NO_ERRORCODE;
-
-	REWARN(safeClose(&listenSock));
-	REWARN(safeClose(&dieOnEventfd));
-
-	WARN(unlink(listenSockName) == 0);
-
-	return err;
 }

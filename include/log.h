@@ -63,8 +63,8 @@
 
 #ifdef USE_FMT_LOG
 #include "formatters/fmtFormatter.h"
-#define ERROR_FMT "error from ({}:{}) with code {}"
-#define RETHROW_FMT "rethrow error from ({}:{}) with code {} at {}:{}"
+#define ERROR_FMT "error from ({}:{}) with code {} "
+#define RETHROW_FMT "rethrow error from ({}:{}) with code {} at {}:{} "
 #endif
 
 #ifndef ACTIVE_LOG_LEVEL
@@ -127,7 +127,7 @@ extern "C"
 	 * @brief init the log server, will be the first(or one of the first) things to run on the program, before main
 	 * @see initLogServer
 	 */
-	err_t initLogger() __attribute__((constructor(1)));
+	err_t initLogger();
 
 	/**
 	 * @brief closes the logServer/wait for it to close will on the exit or return from main
@@ -135,7 +135,7 @@ extern "C"
 	 * will be run on all forks
 	 * @see closeLogServer
 	 */
-	err_t closeLogger() __attribute__((destructor(100)));
+	err_t closeLogger();
 
 #ifdef __cplusplus
 }

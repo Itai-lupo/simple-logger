@@ -1,14 +1,13 @@
-#include "processes.h"
-#include <asm-generic/errno-base.h>
-#define PRINT_FUNCTION(logData)                                                                                        \
-	printf("%s from %s:%d\n", logData.msg, logData.metadata.fileName, logData.metadata.line);
-
+#define PRINT_FUNCTION(logData) printf("%s from %d:%d\n", logData.msg, logData.metadata.fileId, logData.metadata.line);
 #include "log.h"
 
 #include "files.h"
 #include "logServer/server.h"
+#include "processes.h"
+#include "sinks/printToSinks.h"
 #include "sockets.h"
 
+#include <asm-generic/errno-base.h>
 #include <fcntl.h>
 #include <mqueue.h>
 #include <sys/eventfd.h>
@@ -19,22 +18,17 @@
 #include <unistd.h>
 
 #include <fmt/chrono.h>
+#include <fmt/compile.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 
 #define LOG_SERVER_NAME "/log queue"
-
-#define SECS_IN_DAY (24 * 60 * 60)
-
-#define LOG_FMT "[{:^16s}:{:d} {:%Y/%m/%d %T}.{:d}] {} ({}) {:<128s}{} from {:s}:{}:{}\t({:^16s}:{}) \n"
 
 static fd_t killLogServerEfd = INVALID_FD;
 
 static pid_t loggerPid = -1;
 static pid_t fatherPid = -1;
 static mqd_t writeQueue = -1;
-
-constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
 
 THROWS static err_t createWriteLogSocket()
 {
@@ -58,6 +52,8 @@ THROWS err_t initLogger()
 	CHECK(IS_VALID_FD(killLogServerEfd));
 	CHECK(IS_VALID_FD(waitForLoggerEfd));
 
+	RETHROW(initSinks());
+
 	for (size_t i = 0; i < 1; i++)
 	{
 
@@ -78,35 +74,6 @@ cleanup:
 	return err;
 }
 
-static err_t printLog(const logInfo_t &logToPrint)
-{
-	err_t err = NO_ERRORCODE;
-	char threadName[17] = {0};
-	char processName[17] = {0};
-	const char *fileName = "";
-	std::string logRes = {0};
-	ssize_t bytesWritten = 0;
-
-#ifdef USE_FILENAME
-	fileName = logToPrint.metadata.fileName;
-#endif
-
-	REWARN(getThreadName(logToPrint.metadata.pid, logToPrint.metadata.tid, threadName, sizeof(threadName)));
-	REWARN(getProcessName(logToPrint.metadata.pid, processName, sizeof(processName)));
-
-	logRes =
-		fmt::format(LOG_FMT, processName, logToPrint.metadata.pid, fmt::localtime(logToPrint.metadata.logtime.tv_sec),
-					logToPrint.metadata.logtime.tv_nsec, logLevelColors[logToPrint.metadata.severity],
-					logLevelShortMessage[logToPrint.metadata.severity], logToPrint.msg, CEND, fileName,
-					logToPrint.metadata.line, logToPrint.metadata.fileId, threadName, logToPrint.metadata.tid);
-
-	RETHROW(safeWrite({(logToPrint.metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
-					  logRes.data(), logRes.size(), &bytesWritten));
-
-cleanup:
-	return err;
-}
-
 THROWS err_t closeLogger()
 {
 	err_t err = NO_ERRORCODE;
@@ -119,6 +86,7 @@ THROWS err_t closeLogger()
 	writeQueue = -1;
 	CHECK(waitpid(loggerPid, NULL, 0) == loggerPid);
 
+	RETHROW(closeSinks());
 cleanup:
 	return err;
 }
@@ -131,7 +99,7 @@ err_t writeLog(logInfo_t lineData)
 	CHECK(res == 0 || errno == EAGAIN);
 	if (errno == EAGAIN) [[unlikely]]
 	{
-		RETHROW(printLog(lineData));
+		RETHROW(printToSinks(lineData));
 	}
 
 cleanup:

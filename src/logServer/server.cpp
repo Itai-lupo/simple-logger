@@ -1,15 +1,14 @@
 
-#define PRINT_FUNCTION(logData) printLog(logData);
+#define PRINT_FUNCTION(logData) printToSinks(logData);
 #include "log.h"
 
 #include "logServer/server.h"
-
 #include "defines/colors.h"
-#include "processes.h"
-#include "types/err_t.h"
-
 #include "files.h"
+#include "processes.h"
+#include "sinks/printToSinks.h"
 #include "sockets.h"
+#include "types/err_t.h"
 
 #include <fcntl.h>
 #include <fmt/chrono.h>
@@ -38,46 +37,9 @@
 
 #define SECS_IN_DAY (24 * 60 * 60)
 
-#define LOG_FMT "[{:^16s}:{:d} {:%Y/%m/%d %T}.{:d}] {} ({}) {:<128s}{} from {:s}:{}:{}\t({:^16s}:{}) \n"
-
 static fd_t dieOnEventfd = INVALID_FD;
 
 static mqd_t logsQueue = -1;
-
-constexpr const char logLevelShortMessage[] = {'T', 'D', 'I', 'W', 'E', 'C'};
-
-static err_t printLog(const logInfo_t &logToPrint)
-{
-	err_t err = NO_ERRORCODE;
-	char threadName[17] = {0};
-	char processName[17] = {0};
-	const char *fileName = "";
-	std::string logRes = {0};
-	ssize_t bytesWritten = 0;
-
-#ifdef USE_FILENAME
-	fileName = logToPrint.metadata.fileName;
-#endif
-	RETHROW_NOHANDLE_TRACE(
-		getThreadName(logToPrint.metadata.pid, logToPrint.metadata.tid, threadName, sizeof(threadName)),
-		"failed to get name of thread with tid {} ", logToPrint.metadata.tid);
-
-	RETHROW_NOHANDLE_TRACE(getProcessName(logToPrint.metadata.pid, processName, sizeof(processName)),
-						   "failed to get name of process with pid {} ", logToPrint.metadata.pid);
-
-	logRes =
-		fmt::format(LOG_FMT, processName, logToPrint.metadata.pid, fmt::localtime(logToPrint.metadata.logtime.tv_sec),
-					logToPrint.metadata.logtime.tv_nsec, logLevelColors[logToPrint.metadata.severity],
-					logLevelShortMessage[logToPrint.metadata.severity], logToPrint.msg, CEND, fileName,
-					logToPrint.metadata.line, logToPrint.metadata.fileId, threadName, logToPrint.metadata.tid);
-
-	RETHROW(safeWrite({(logToPrint.metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
-					  logRes.data(), logRes.size(), &bytesWritten));
-
-cleanup:
-	return err;
-}
-
 THROWS static err_t createListenSocket(const char *const listenSockName)
 {
 	err_t err = NO_ERRORCODE;
@@ -101,7 +63,7 @@ err_t static pollCalback(struct pollfd *fds, bool *shouldCountinue, [[maybe_unus
 	if (fds[0].revents & POLLIN)
 	{
 		CHECK(mq_receive(logsQueue, (char *)&buf, sizeof(logInfo_t), &prio) >= 0);
-		RETHROW(printLog(buf));
+		RETHROW(printToSinks(buf));
 	}
 	else if (fds[1].revents & POLLIN)
 	{

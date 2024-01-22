@@ -30,3 +30,11 @@ typedef enum
 	errorLevel = LOG_ERR_LEVEL,
 	criticalLevel = LOG_CRITICAL_LEVEL,
 } logLevel;
+
+#ifdef __cplusplus
+constexpr
+#endif
+const char logLevelShortMessage[] = {
+	[traceLevel] = 'T', [debugLevel] = 'D', [infoLevel] = 'I',
+	[warnLevel] = 'W',	[errorLevel] = 'E', [criticalLevel] = 'C',
+};

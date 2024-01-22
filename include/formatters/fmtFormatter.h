@@ -9,6 +9,7 @@
  *
  */
 #pragma once
+#include <fmt/compile.h>
 #include <fmt/format.h>
 #include <string>
 
@@ -18,7 +19,6 @@
  */
 #define FORMAT_FUNC(logData, formatStr, ...)                                                                           \
 	{                                                                                                                  \
-		std::string buffer = fmt::format(formatStr __VA_OPT__(, ) __VA_ARGS__);                                        \
-		strncpy(logData.msg, buffer.data(), MAX_LOG_LEN);                                                              \
+		fmt::format_to_n(logData.msg, MAX_LOG_LEN, FMT_COMPILE(formatStr) __VA_OPT__(, ) __VA_ARGS__);                 \
 	}
 #endif // !FORMAT_FUNC

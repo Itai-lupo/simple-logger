@@ -113,8 +113,10 @@ typedef struct
 					   setFileName(__FILE__).fileId = FILE_ID,                                                                \
 					   .line = __LINE__,                                                                                      \
 					   .severity = severitryLevel,                                                                            \
+					   .logtime = { 0, 0},                                                                                        \
 					   .tid = gettid(),                                                                                       \
 					   .pid = getpid(),                                                                                       \
 					   },                                                                                                         \
-	};                                                                                                                 \
+		.msg = {0} \
+	  };                                                                                                   \
 	clock_gettime(CLOCK_TO_USE, &logDataName.metadata.logtime);

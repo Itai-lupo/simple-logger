@@ -2,7 +2,6 @@
 #include "defaultTrace.h"
 // #include "log.h"
 
-
 #include "err.h"
 #include "files.h"
 #include "types/fd_t.h"

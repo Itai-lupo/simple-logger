@@ -34,7 +34,7 @@ typedef enum
 #ifdef __cplusplus
 constexpr
 #endif
-const char logLevelShortMessage[] = {
-	[traceLevel] = 'T', [debugLevel] = 'D', [infoLevel] = 'I',
-	[warnLevel] = 'W',	[errorLevel] = 'E', [criticalLevel] = 'C',
+	static const char logLevelShortMessage[] = {
+		[traceLevel] = 'T', [debugLevel] = 'D', [infoLevel] = 'I',
+		[warnLevel] = 'W',	[errorLevel] = 'E', [criticalLevel] = 'C',
 };

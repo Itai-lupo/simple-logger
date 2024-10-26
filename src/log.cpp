@@ -34,7 +34,7 @@ THROWS static err_t createWriteLogSocket()
 {
 	err_t err = NO_ERRORCODE;
 
-	writeQueue = mq_open("/log queue", O_WRONLY | O_NONBLOCK);
+	writeQueue = mq_open("/log queue", O_WRONLY);
 	CHECK(writeQueue != -1);
 
 cleanup:

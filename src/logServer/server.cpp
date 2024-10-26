@@ -2,9 +2,9 @@
 #define PRINT_FUNCTION(logData) printToSinks(logData);
 #include "log.h"
 
-#include "logServer/server.h"
 #include "defines/colors.h"
 #include "files.h"
+#include "logServer/server.h"
 #include "processes.h"
 #include "sinks/printToSinks.h"
 #include "sockets.h"
@@ -80,8 +80,8 @@ err_t static logServer()
 	err_t err = NO_ERRORCODE;
 	int nfds = 2;
 	struct pollfd fds[2]{
-		[0] = {.fd = logsQueue,		.events = POLLIN},
-		[1] = {.fd = dieOnEventfd.fd, .events = POLLIN},
+		[0] = {.fd = logsQueue,		.events = POLLIN, .revents = 0},
+		[1] = {.fd = dieOnEventfd.fd, .events = POLLIN, .revents = 0},
 	};
 
 	RETHROW(safePpoll(fds, nfds, NULL, NULL, pollCalback, NULL));

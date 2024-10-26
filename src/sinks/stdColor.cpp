@@ -15,7 +15,7 @@
 #include <fcntl.h>
 
 #define LOG_FMT                                                                                                        \
-	"{i:d} [{processName:^16s}:{pid:d} {time:%Y/%m/%d %T}.{timeNs:d}] {colorStart:s} ({severity:c}) "                        \
+	"{i:d} [{processName:^16s}:{pid:d} {time:%Y/%m/%d %T}.{timeNs:d}] {colorStart:s} ({severity:c}) "                  \
 	"{msg:<128s}{colorEnd:s} from {fileName:s}:{line:d}:{fileId:d}\t({threadName:^16s}:{tid:d}) \n"
 
 using namespace fmt::literals;
@@ -23,10 +23,10 @@ int i = 0;
 err_t initStdColorSink()
 {
 	err_t err = NO_ERRORCODE;
-	QUITE_CHECK(fcntl(STDOUT_FILENO, F_SETFL, fcntl(STDOUT_FILENO, F_GETFL) | O_NONBLOCK) == 0);
+	// QUITE_CHECK(fcntl(STDOUT_FILENO, F_SETFL, fcntl(STDOUT_FILENO, F_GETFL) | O_NONBLOCK) == 0);
 	// QUITE_CHECK(fcntl(STDERR_FILENO, F_SETFL, fcntl(STDERR_FILENO, F_GETFL) | O_NONBLOCK) == 0);
 
-cleanup:
+	// cleanup:
 	return err;
 }
 
@@ -48,7 +48,7 @@ err_t stdColorSink(logInfo_t logToPrint, char *processName, char *threadName)
 		"severity"_a = logLevelShortMessage[logToPrint.metadata.severity], "msg"_a = logToPrint.msg,
 		"colorEnd"_a = CEND, "fileName"_a = fileName, "line"_a = logToPrint.metadata.line,
 		"fileId"_a = logToPrint.metadata.fileId, "threadName"_a = threadName, "tid"_a = logToPrint.metadata.tid);
-i++;
+	i++;
 	QUITE_RETHROW(safeWrite({(logToPrint.metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
 							logRes.data(), logRes.size(), &bytesWritten));
 

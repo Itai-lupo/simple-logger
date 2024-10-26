@@ -3,11 +3,9 @@
 #include "sinks/stdColor.h"
 
 #include "log.h"
-#include <cstdint>
-#include <future>
 
-#include "defines/colors.h"
 #include "err.h"
+
 #include "processes.h"
 
 typedef err_t (*sinkInitFunc)();

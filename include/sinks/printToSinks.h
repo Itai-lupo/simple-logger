@@ -7,7 +7,7 @@ extern "C"
 {
 #endif
 	err_t initSinks();
-	err_t printToSinks(logInfo_t logData);
+	err_t printToSinks(logInfo_t *logData);
 	err_t closeSinks();
 #ifdef __cplusplus
 }

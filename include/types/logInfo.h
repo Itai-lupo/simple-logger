@@ -11,11 +11,20 @@
 #pragma once
 
 #include "types/logLevels.h"
+#include "types/safeQueue.h"
 
 #include <linux/limits.h>
 #include <sched.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifndef ALLOC_LOGS_FROM_STACK
+#include "defines/unlikely.h"
+#include "types/memoryAllocator.h"
+#include "types/safeQueue.h"
+
+extern safeQueue *sharedLogsQueue;
+#endif //  ALLOC_LOGS_FROM_STACK
 
 /**
  * @brief the maximum length a log message can be
@@ -91,7 +100,6 @@ typedef struct
 } logInfo_t;
 
 #ifdef USE_FILENAME
-
 #define setFileName(filePath) .fileName = filePath,
 #else
 /**
@@ -102,21 +110,43 @@ typedef struct
 
 /**
  * @brief constract the log context.
+ * @note may alloc them from stack or from loggerAllocator acoroding to  ALLOC_LOGS_FROM_STACK config
  *
  * @param logDataName the name of the logData struct to create
  * @param severitryLevel the severitry of the log of type logLevel
  */
+// #define ALLOC_LOGS_FROM_STACK
+#ifdef ALLOC_LOGS_FROM_STACK
 #define CONSTRACT_LOG_INFO(logDataName, severitryLevel)                                                                \
-	logInfo_t logDataName = {                                                                                          \
+	logInfo_t temp = {                                                                                                 \
 		.metadata =                                                                                                    \
 			{                                                                                                          \
 					   setFileName(__FILE__).fileId = FILE_ID,                                                                \
 					   .line = __LINE__,                                                                                      \
 					   .severity = severitryLevel,                                                                            \
-					   .logtime = { 0, 0},                                                                                        \
+					   .logtime = {0, 0},                                                                                     \
 					   .tid = gettid(),                                                                                       \
 					   .pid = getpid(),                                                                                       \
 					   },                                                                                                         \
 		.msg = {0} \
 	  };                                                                                                   \
-	clock_gettime(CLOCK_TO_USE, &logDataName.metadata.logtime);
+	clock_gettime(CLOCK_TO_USE, &temp.metadata.logtime);                                                               \
+	logInfo_t *logDataName = &temp;
+#else
+
+#define CONSTRACT_LOG_INFO(logDataName, severitryLevel)                                                                \
+	logInfo_t *logDataName = NULL;                                                                                     \
+	err_t tempErr = safeQueueGetEmptyNode(sharedLogsQueue, (void **)&logDataName);                                     \
+	unlikelyIf(IS_ERROR(tempErr) || logDataName == NULL)                                                               \
+	{                                                                                                                  \
+		err = tempErr;                                                                                                 \
+		break;                                                                                                         \
+	}                                                                                                                  \
+	logDataName->metadata.fileId = FILE_ID;                                                                            \
+	logDataName->metadata.line = __LINE__;                                                                             \
+	logDataName->metadata.severity = severitryLevel;                                                                   \
+	logDataName->metadata.tid = gettid();                                                                              \
+	logDataName->metadata.pid = getpid();                                                                              \
+	clock_gettime(CLOCK_TO_USE, &logDataName->metadata.logtime);
+
+#endif //  ALLOC_LOGS_FROM_STACK

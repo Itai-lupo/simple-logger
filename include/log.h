@@ -121,7 +121,7 @@ extern "C"
 	 * @see logServer/server.h
 	 * @see logInfo_t
 	 */
-	err_t writeLog(logInfo_t logData);
+	err_t writeLog(logInfo_t *logData);
 
 	/**
 	 * @brief init the log server, will be the first(or one of the first) things to run on the program, before main

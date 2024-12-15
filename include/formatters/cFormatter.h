@@ -18,6 +18,6 @@
  */
 #define FORMAT_FUNC(logData, format, ...)                                                                              \
 	{                                                                                                                  \
-		snprintf(logData.msg, MAX_LOG_LEN, format __VA_OPT__(, ) __VA_ARGS__);                                         \
+		snprintf(logData->msg, MAX_LOG_LEN, format __VA_OPT__(, ) __VA_ARGS__);                                         \
 	}
 #endif // !FORMAT_FUNC

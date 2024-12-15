@@ -1,11 +1,11 @@
-#define PRINT_FUNCTION(logData) printf("%s from %d:%d\n", logData.msg, logData.metadata.fileId, logData.metadata.line);
+#include "allocators/sharedMemoryPool.h"
+#include "types/safeQueue.h"
+#define PRINT_FUNCTION(logData) printf("%s from %d:%d\n", logData->msg, logData->metadata.fileId, logData->metadata.line);
 #include "log.h"
 
 #include "files.h"
 #include "logServer/server.h"
-#include "processes.h"
 #include "sinks/printToSinks.h"
-#include "sockets.h"
 
 #include <asm-generic/errno-base.h>
 #include <fcntl.h>
@@ -24,22 +24,14 @@
 
 #define LOG_SERVER_NAME "/log queue"
 
+safeQueue *sharedLogsQueue = NULL;
+
+memoryAllocator *loggerAllocator = NULL;
+
 static fd_t killLogServerEfd = INVALID_FD;
 
 static pid_t loggerPid = -1;
-static pid_t fatherPid = -1;
-static mqd_t writeQueue = -1;
-
-THROWS static err_t createWriteLogSocket()
-{
-	err_t err = NO_ERRORCODE;
-
-	writeQueue = mq_open("/log queue", O_WRONLY);
-	CHECK(writeQueue != -1);
-
-cleanup:
-	return err;
-}
+static pid_t fatherPid = -1;;
 
 THROWS err_t initLogger()
 {
@@ -51,7 +43,9 @@ THROWS err_t initLogger()
 
 	CHECK(IS_VALID_FD(killLogServerEfd));
 	CHECK(IS_VALID_FD(waitForLoggerEfd));
-
+	
+    RETHROW(initSafeQueue(sizeof(logInfo_t), getSharedAllocator(), 100, &sharedLogsQueue))
+	
 	RETHROW(initSinks());
 
 	for (size_t i = 0; i < 1; i++)
@@ -68,7 +62,6 @@ THROWS err_t initLogger()
 	fatherPid = getpid();
 	RETHROW(safeRead(waitForLoggerEfd, &u, sizeof(u), &bytesRead));
 	RETHROW(safeClose(&waitForLoggerEfd));
-	RETHROW(createWriteLogSocket());
 
 cleanup:
 	return err;
@@ -82,8 +75,7 @@ THROWS err_t closeLogger()
 
 	RETHROW(safeWrite(killLogServerEfd, &u, sizeof(uint64_t), &bytesWritten));
 	REWARN(safeClose(&killLogServerEfd));
-	WARN(mq_close(writeQueue) == 0);
-	writeQueue = -1;
+
 	CHECK(waitpid(loggerPid, NULL, 0) == loggerPid);
 
 	RETHROW(closeSinks());
@@ -91,16 +83,11 @@ cleanup:
 	return err;
 }
 
-err_t writeLog(logInfo_t lineData)
+err_t writeLog(logInfo_t *lineData)
 {
 	err_t err = NO_ERRORCODE;
-	errno = 0;
-	int res = mq_send(writeQueue, (char *)&lineData, sizeof(logInfo_t), 0);
-	CHECK(res == 0 || errno == EAGAIN);
-	if (errno == EAGAIN) [[unlikely]]
-	{
-		RETHROW(printToSinks(lineData));
-	}
+	CHECK(lineData != NULL);
+	RETHROW(safeQueuePush(sharedLogsQueue, (void*)lineData));
 
 cleanup:
 	errno = 0;

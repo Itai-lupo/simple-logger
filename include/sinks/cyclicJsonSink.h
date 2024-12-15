@@ -7,7 +7,7 @@ extern "C"
 {
 #endif
 	err_t initCyclicJsonSink();
-	err_t cyclicJsonSink(logInfo_t logToPrint, char *processName, char *ThreadName);
+	err_t cyclicJsonSink(logInfo_t *logToPrint, char *processName, char *ThreadName);
 	err_t closeCyclicJsonSink();
 #ifdef __cplusplus
 }

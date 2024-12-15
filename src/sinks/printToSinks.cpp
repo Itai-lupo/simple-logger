@@ -9,7 +9,7 @@
 #include "processes.h"
 
 typedef err_t (*sinkInitFunc)();
-typedef err_t (*sinkPrintFunc)(logInfo_t logToPrint, char *processName, char *ThreadName);
+typedef err_t (*sinkPrintFunc)(logInfo_t *logToPrint, char *processName, char *ThreadName);
 typedef err_t (*sinkCloseFunc)();
 
 typedef struct
@@ -62,14 +62,14 @@ err_t closeSinks()
 	return err;
 }
 
-err_t printToSinks(logInfo_t logToPrint)
+err_t printToSinks(logInfo_t *logToPrint)
 {
 	err_t err = NO_ERRORCODE;
 	char threadName[17] = {0};
 	char processName[17] = {0};
 
-	err = (getThreadName(logToPrint.metadata.pid, logToPrint.metadata.tid, threadName, sizeof(threadName)));
-	err = (getProcessName(logToPrint.metadata.pid, processName, sizeof(processName)));
+	err = (getThreadName(logToPrint->metadata.pid, logToPrint->metadata.tid, threadName, sizeof(threadName)));
+	err = (getProcessName(logToPrint->metadata.pid, processName, sizeof(processName)));
 	err = NO_ERRORCODE;
 
 	for (size_t i = 0; i < sizeof(sinks) / sizeof(sinks[0]); i++)

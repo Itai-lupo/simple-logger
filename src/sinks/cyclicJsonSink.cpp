@@ -50,7 +50,7 @@ cleanup:
 	return err;
 }
 
-err_t cyclicJsonSink(logInfo_t logToPrint, char *processName, char *threadName)
+err_t cyclicJsonSink(logInfo_t *logToPrint, char *processName, char *threadName)
 {
 	err_t err = NO_ERRORCODE;
 	const char *fileName = "";
@@ -58,15 +58,15 @@ err_t cyclicJsonSink(logInfo_t logToPrint, char *processName, char *threadName)
 	ssize_t bytesWritten = 0;
 
 #ifdef USE_FILENAME
-	fileName = logToPrint.metadata.fileName;
+	fileName = logToPrint->metadata.fileName;
 #endif
 	umask(0);
 	logRes = fmt::format(
-		FMT_COMPILE(LOG_FMT), "processName"_a = processName, "pid"_a = logToPrint.metadata.pid,
-		"time"_a = fmt::localtime(logToPrint.metadata.logtime.tv_sec), "timeNs"_a = logToPrint.metadata.logtime.tv_nsec,
-		"severity"_a = logLevelShortMessage[logToPrint.metadata.severity], "msg"_a = logToPrint.msg,
-		"fileName"_a = fileName, "line"_a = logToPrint.metadata.line, "fileId"_a = logToPrint.metadata.fileId,
-		"threadName"_a = threadName, "tid"_a = logToPrint.metadata.tid);
+		FMT_COMPILE(LOG_FMT), "processName"_a = processName, "pid"_a = logToPrint->metadata.pid,
+		"time"_a = fmt::localtime(logToPrint->metadata.logtime.tv_sec), "timeNs"_a = logToPrint->metadata.logtime.tv_nsec,
+		"severity"_a = logLevelShortMessage[logToPrint->metadata.severity], "msg"_a = logToPrint->msg,
+		"fileName"_a = fileName, "line"_a = logToPrint->metadata.line, "fileId"_a = logToPrint->metadata.fileId,
+		"threadName"_a = threadName, "tid"_a = logToPrint->metadata.tid);
 
 	QUITE_RETHROW(safeWrite(memfd, logRes.data(), logRes.size(), &bytesWritten));
 

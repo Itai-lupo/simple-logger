@@ -30,7 +30,7 @@ err_t initStdColorSink()
 	return err;
 }
 
-err_t stdColorSink(logInfo_t logToPrint, char *processName, char *threadName)
+err_t stdColorSink(logInfo_t *logToPrint, char *processName, char *threadName)
 {
 	err_t err = NO_ERRORCODE;
 	const char *fileName = "";
@@ -38,18 +38,18 @@ err_t stdColorSink(logInfo_t logToPrint, char *processName, char *threadName)
 	ssize_t bytesWritten = 0;
 
 #ifdef USE_FILENAME
-	fileName = logToPrint.metadata.fileName;
+	fileName = logToPrint->metadata.fileName;
 #endif
 
 	logRes = fmt::format(
-		FMT_COMPILE(LOG_FMT), "i"_a = i, "processName"_a = processName, "pid"_a = logToPrint.metadata.pid,
-		"time"_a = fmt::localtime(logToPrint.metadata.logtime.tv_sec), "timeNs"_a = logToPrint.metadata.logtime.tv_nsec,
-		"colorStart"_a = logLevelColors[logToPrint.metadata.severity],
-		"severity"_a = logLevelShortMessage[logToPrint.metadata.severity], "msg"_a = logToPrint.msg,
-		"colorEnd"_a = CEND, "fileName"_a = fileName, "line"_a = logToPrint.metadata.line,
-		"fileId"_a = logToPrint.metadata.fileId, "threadName"_a = threadName, "tid"_a = logToPrint.metadata.tid);
+		FMT_COMPILE(LOG_FMT), "i"_a = i, "processName"_a = processName, "pid"_a = logToPrint->metadata.pid,
+		"time"_a = fmt::localtime(logToPrint->metadata.logtime.tv_sec), "timeNs"_a = logToPrint->metadata.logtime.tv_nsec,
+		"colorStart"_a = logLevelColors[logToPrint->metadata.severity],
+		"severity"_a = logLevelShortMessage[logToPrint->metadata.severity], "msg"_a = logToPrint->msg,
+		"colorEnd"_a = CEND, "fileName"_a = fileName, "line"_a = logToPrint->metadata.line,
+		"fileId"_a = logToPrint->metadata.fileId, "threadName"_a = threadName, "tid"_a = logToPrint->metadata.tid);
 	i++;
-	QUITE_RETHROW(safeWrite({(logToPrint.metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
+	QUITE_RETHROW(safeWrite({(logToPrint->metadata.severity > logLevel::warnLevel) ? STDERR_FILENO : STDOUT_FILENO},
 							logRes.data(), logRes.size(), &bytesWritten));
 
 cleanup:

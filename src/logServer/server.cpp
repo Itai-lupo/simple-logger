@@ -1,13 +1,14 @@
+#include "types/logInfo.h"
+#include "types/safeQueue.h"
+#include <cstdint>
+#include <sys/types.h>
 
 #define PRINT_FUNCTION(logData) printToSinks(logData);
-#include "log.h"
+#include "defaultTrace.h"
 
-#include "defines/colors.h"
 #include "files.h"
 #include "logServer/server.h"
-#include "processes.h"
 #include "sinks/printToSinks.h"
-#include "sockets.h"
 #include "types/err_t.h"
 
 #include <fcntl.h>
@@ -17,7 +18,6 @@
 
 #include <fcntl.h>
 #include <mqueue.h>
-#include <string>
 #include <sys/poll.h>
 #include <sys/prctl.h>
 #include <sys/un.h>
@@ -40,6 +40,8 @@
 static fd_t dieOnEventfd = INVALID_FD;
 
 static mqd_t logsQueue = -1;
+
+
 THROWS static err_t createListenSocket(const char *const listenSockName)
 {
 	err_t err = NO_ERRORCODE;
@@ -56,21 +58,25 @@ cleanup:
 err_t static pollCalback(struct pollfd *fds, bool *shouldCountinue, [[maybe_unused]] void *ptr)
 {
 	err_t err = NO_ERRORCODE;
-	uint32_t prio = 0;
-
+	ssize_t bytesRead = 0;
+	uint64_t logsCount = 0;
 	logInfo_t buf;
 
 	if (fds[0].revents & POLLIN)
 	{
-		CHECK(mq_receive(logsQueue, (char *)&buf, sizeof(logInfo_t), &prio) >= 0);
-		RETHROW(printToSinks(buf));
+		bytesRead = 0;
+		RETHROW(safeRead( sharedLogsQueue->eventFd, &logsCount, sizeof(uint64_t), &bytesRead));
+		for (uint64_t i = 0; i < logsCount; i++) {
+			RETHROW(safeQueuePop(sharedLogsQueue, &buf, sizeof(logInfo_t)));
+			RETHROW(printToSinks(&buf));
+		}
 	}
-	else if (fds[1].revents & POLLIN)
+	
+	if (fds[1].revents & POLLIN)
 	{
-		// if there are no more data to read from fds[0](the log socket) and there is an exit event(data to read from
-		// fds[1]_ then exit
 		*shouldCountinue = false;
 	}
+	
 cleanup:
 	return err;
 }
@@ -80,13 +86,14 @@ err_t static logServer()
 	err_t err = NO_ERRORCODE;
 	int nfds = 2;
 	struct pollfd fds[2]{
-		[0] = {.fd = logsQueue,		.events = POLLIN, .revents = 0},
+		[0] = {.fd = sharedLogsQueue->eventFd.fd,		.events = POLLIN, .revents = 0},
 		[1] = {.fd = dieOnEventfd.fd, .events = POLLIN, .revents = 0},
 	};
 
 	RETHROW(safePpoll(fds, nfds, NULL, NULL, pollCalback, NULL));
 
 cleanup:
+	REWARN(err);
 	return err;
 }
 
@@ -113,7 +120,7 @@ __attribute__((__noreturn__)) void initLogServer(const char *const listenSockNam
 	dieOnEventfd = killLogServerEfd;
 
 	RETHROW(createListenSocket(listenSockName));
-
+	
 	RETHROW(safeWrite(waitForLoggerEfd, &u, sizeof(uint64_t), &bytesWritten));
 	REWARN(safeClose(&waitForLoggerEfd));
 
